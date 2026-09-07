@@ -5,6 +5,7 @@ import com.hardware.shop.model.User;
 import org.mindrot.jbcrypt.BCrypt;
 
 import java.sql.SQLException;
+import java.util.List;
 
 public class UserService {
 
@@ -29,6 +30,7 @@ public class UserService {
     public User login(String username, String plainPassword) throws SQLException {
 
         if (username == null || username.isBlank()) {
+
             throw new IllegalArgumentException("Username is required.");
         }
 
@@ -37,16 +39,19 @@ public class UserService {
         User user = userDAO.findByUsername(username);
 
         if (user == null) {
+
             throw new IllegalArgumentException("Invalid username or password.");
         }
 
         if (!"ACTIVE".equalsIgnoreCase(user.getStatus())) {
+
             throw new IllegalArgumentException("User account is inactive.");
         }
 
         boolean passwordMatches = BCrypt.checkpw(plainPassword, user.getPasswordHash());
 
         if (!passwordMatches) {
+
             throw new IllegalArgumentException("Invalid username or password.");
         }
 
@@ -55,16 +60,22 @@ public class UserService {
 
     public User findById(int id) throws SQLException {
 
-        if (id <= 0) {
-            throw new IllegalArgumentException("User ID must be greater than 0.");
-        }
+        validateId(id);
 
         return userDAO.findById(id);
     }
 
-    private void validateUser(User user) {
+    public List<User> findAll() throws SQLException {
+
+        return userDAO.findAll();
+    }
+
+    public boolean update(int id, User user, String newPassword) throws SQLException {
+
+        validateId(id);
 
         if (user == null) {
+
             throw new IllegalArgumentException("User cannot be null.");
         }
 
@@ -82,16 +93,102 @@ public class UserService {
 
             user.setStatus("ACTIVE");
         }
+
+        if (!"ACTIVE".equalsIgnoreCase(user.getStatus()) && !"INACTIVE".equalsIgnoreCase(user.getStatus())) {
+
+            throw new IllegalArgumentException("Status must be ACTIVE or INACTIVE.");
+        }
+
+        user.setId(id);
+
+        boolean updated = userDAO.update(user);
+
+        if (!updated) {
+            return false;
+        }
+
+        if (newPassword != null && !newPassword.isBlank()) {
+
+            validatePassword(newPassword);
+
+            String hashedPassword = BCrypt.hashpw(newPassword, BCrypt.gensalt(12));
+
+            return userDAO.updatePassword(id, hashedPassword);
+        }
+
+        return true;
+    }
+
+    public boolean delete(int id) throws SQLException {
+
+        validateId(id);
+
+        User user = userDAO.findById(id);
+
+        if (user == null) {
+            return false;
+        }
+
+        /*
+         * Do not allow deletion of the last
+         * remaining user.
+         */
+        List<User> users = userDAO.findAll();
+
+        if (users.size() <= 1) {
+
+            throw new IllegalArgumentException("The last Admin user cannot be deleted.");
+        }
+
+        return userDAO.delete(id);
+    }
+
+    private void validateUser(User user) {
+
+        if (user == null) {
+
+            throw new IllegalArgumentException("User cannot be null.");
+        }
+
+        if (user.getUsername() == null || user.getUsername().isBlank()) {
+
+            throw new IllegalArgumentException("Username is required.");
+        }
+
+        if (user.getFullName() == null || user.getFullName().isBlank()) {
+
+            throw new IllegalArgumentException("Full name is required.");
+        }
+
+        if (user.getStatus() == null || user.getStatus().isBlank()) {
+
+            user.setStatus("ACTIVE");
+        }
+
+        if (!"ACTIVE".equalsIgnoreCase(user.getStatus()) && !"INACTIVE".equalsIgnoreCase(user.getStatus())) {
+
+            throw new IllegalArgumentException("Status must be ACTIVE or INACTIVE.");
+        }
     }
 
     private void validatePassword(String password) {
 
         if (password == null || password.isBlank()) {
+
             throw new IllegalArgumentException("Password is required.");
         }
 
         if (password.length() < 6) {
+
             throw new IllegalArgumentException("Password must contain at least 6 characters.");
+        }
+    }
+
+    private void validateId(int id) {
+
+        if (id <= 0) {
+
+            throw new IllegalArgumentException("User ID must be greater than 0.");
         }
     }
 }

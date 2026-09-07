@@ -1,78 +1,125 @@
 package com.hardware.shop;
 
 import com.hardware.shop.controller.*;
+import com.hardware.shop.util.AuthenticatedHandler;
 import com.sun.net.httpserver.HttpServer;
-import com.hardware.shop.controller.SupplierController;
-import com.hardware.shop.controller.PurchaseController;
-import com.hardware.shop.controller.SaleController;
-import com.hardware.shop.controller.CustomerPaymentController;
-import com.hardware.shop.controller.CustomerBalanceController;
-import com.hardware.shop.controller.SupplierPaymentController;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.net.InetSocketAddress;
-
-import com.hardware.shop.controller.AuthController;
+import java.nio.charset.StandardCharsets;
 
 public class Main {
 
-    private static final int PORT = 8080;
+    public static void main(String[] args) throws IOException {
 
-    public static void main(String[] args) {
+        HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
 
-        try {
+        /*
+         * PUBLIC ENDPOINTS
+         */
 
-            HttpServer server = HttpServer.create(new InetSocketAddress(PORT), 0);
+        server.createContext("/api/health", Main::health);
 
-            server.createContext("/api/health", exchange -> {
+        server.createContext("/api/auth", new AuthController());
 
-                String response = """
-                        {
-                            "status": "UP",
-                            "message": "Hardware Shop API is running"
-                        }
-                        """;
+        /*
+         * PROTECTED ENDPOINTS
+         */
 
-                exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
+        server.createContext("/api/products", new AuthenticatedHandler(new ProductController()));
 
-                byte[] responseBytes = response.getBytes();
+        server.createContext("/api/categories", new AuthenticatedHandler(new CategoryController()));
 
-                exchange.sendResponseHeaders(200, responseBytes.length);
+        server.createContext("/api/units", new AuthenticatedHandler(new UnitController()));
 
-                exchange.getResponseBody().write(responseBytes);
-                exchange.getResponseBody().close();
-            });
+        server.createContext("/api/brands", new AuthenticatedHandler(new BrandController()));
 
-            server.createContext("/api/products", new ProductController());
-            server.createContext("/api/categories", new CategoryController());
-            server.createContext("/api/units", new UnitController());
-            server.createContext("/api/brands", new BrandController());
-            server.createContext("/api/customers", new CustomerController());
-            server.createContext("/api/suppliers", new SupplierController());
-            server.createContext("/api/auth", new AuthController());
-            server.createContext("/api/purchases", new PurchaseController());
-            server.createContext("/api/sales", new SaleController());
-            server.createContext("/api/customer-payments", new CustomerPaymentController());
-            server.createContext("/api/customer-balance", new CustomerBalanceController());
-            server.createContext("/api/supplier-payments", new SupplierPaymentController());
-            server.createContext("/api/supplier-balance", new SupplierBalanceController());
-            server.createContext("/api/sales-returns", new SalesReturnController());
-            server.createContext("/api/purchase-returns", new PurchaseReturnController());
-            server.createContext("/api/expenses", new ExpenseController());
+        server.createContext("/api/customers", new AuthenticatedHandler(new CustomerController()));
 
-            server.start();
+        server.createContext("/api/suppliers", new AuthenticatedHandler(new SupplierController()));
 
-            System.out.println("=================================");
-            System.out.println("HARDWARE SHOP API SERVER STARTED");
-            System.out.println("Port: " + PORT);
-            System.out.println("Health: http://localhost:" + PORT + "/api/health");
-            System.out.println("Products: http://localhost:" + PORT + "/api/products");
-            System.out.println("=================================");
+        server.createContext("/api/purchases", new AuthenticatedHandler(new PurchaseController()));
 
-        } catch (IOException e) {
+        server.createContext("/api/sales", new AuthenticatedHandler(new SaleController()));
 
-            System.out.println("Failed to start API server.");
-            e.printStackTrace();
+        server.createContext("/api/customer-payments", new AuthenticatedHandler(new CustomerPaymentController()));
+
+        server.createContext("/api/customer-balance", new AuthenticatedHandler(new CustomerBalanceController()));
+
+        server.createContext("/api/supplier-payments", new AuthenticatedHandler(new SupplierPaymentController()));
+
+        server.createContext("/api/supplier-balance", new AuthenticatedHandler(new SupplierBalanceController()));
+
+        server.createContext("/api/sales-returns", new AuthenticatedHandler(new SalesReturnController()));
+
+        server.createContext("/api/purchase-returns", new AuthenticatedHandler(new PurchaseReturnController()));
+
+        server.createContext("/api/expenses", new AuthenticatedHandler(new ExpenseController()));
+
+        server.createContext("/api/dashboard", new AuthenticatedHandler(new DashboardController()));
+
+        server.createContext("/api/reports", new AuthenticatedHandler(new ReportController()));
+
+        server.createContext("/api/users", new AuthenticatedHandler(new UserController()));
+
+        server.setExecutor(null);
+
+        server.start();
+
+        System.out.println("Hardware Shop Backend started.");
+
+        System.out.println("Server: http://localhost:8080");
+
+        System.out.println("Health: http://localhost:8080/api/health");
+
+        System.out.println("Authentication: /api/auth/login");
+
+        System.out.println("Protected APIs require: " + "Authorization: Bearer <token>");
+    }
+
+    private static void health(com.sun.net.httpserver.HttpExchange exchange) throws IOException {
+
+        addCorsHeaders(exchange);
+
+        if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+
+            exchange.sendResponseHeaders(204, -1);
+
+            exchange.close();
+            return;
         }
+
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+
+            sendHealthResponse(exchange, 405, "{\"error\":\"Method not allowed\"}");
+
+            return;
+        }
+
+        sendHealthResponse(exchange, 200, "{\"status\":\"OK\",\"service\":\"Hardware Shop Backend\"}");
+    }
+
+    private static void sendHealthResponse(com.sun.net.httpserver.HttpExchange exchange, int statusCode, String response) throws IOException {
+
+        byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+
+        exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
+
+        exchange.sendResponseHeaders(statusCode, bytes.length);
+
+        try (OutputStream output = exchange.getResponseBody()) {
+
+            output.write(bytes);
+        }
+    }
+
+    private static void addCorsHeaders(com.sun.net.httpserver.HttpExchange exchange) {
+
+        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+
+        exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+        exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
     }
 }
